@@ -44,7 +44,6 @@ JOB_ID=$(sbatch \
     --partition="${PARTITION}" \
     --time="${TIME_LIMIT}" \
     --gres="gpu:${NUM_GPUS}" \
-    --no-container-mount-home \
     --container-image="${CONTAINER}" \
     --container-mounts="/lustre/fsw/:/lustre/fsw/,/lustre/fs1:/lustre/fs1" \
     --output="${SLURM_LOG_DIR}/%x-%j.out" \
