@@ -19,6 +19,8 @@ uv run torchrun \
     --lr-warmup-iters 20 \
     --min-lr 2.0e-5 \
     --weight-decay 0.01 \
+    --save-initial-checkpoint \
+    --checkpoint-dir /tmp/checkpoint_0 \
     --wandb-project "Megatron-Bridge-MIMO" \
     --wandb-exp-name "mimo-llava-e2e-test" \
     --wandb-save-dir "/tmp/wandb" \

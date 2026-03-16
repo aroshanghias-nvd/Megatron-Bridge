@@ -195,6 +195,7 @@ def train_mimo(
     global_state: GlobalState,
     mimo_infra: "MimoModelInfra",
     multimodule_communicator: "MultiModulePipelineCommunicator",
+    save_initial_checkpoint: bool = False,
 ) -> None:
     """Main MIMO training loop.
 
@@ -223,6 +224,7 @@ def train_mimo(
         global_state: GlobalState containing timers, config, train_state.
         mimo_infra: MimoModelInfra with grids, topology, pg_collections.
         multimodule_communicator: MultiModulePipelineCommunicator for P2P.
+        save_initial_checkpoint: If True, save a checkpoint at step 0 before training.
     """
     timers = global_state.timers
     train_state = global_state.train_state
@@ -303,6 +305,19 @@ def train_mimo(
             prof.start()
 
     logger.info(f"Rank {dist.get_rank()}: Starting MIMO training loop")
+
+    # Save initial checkpoint at step 0 (before any training) if requested
+    if save_initial_checkpoint and cfg.checkpoint.save is not None and train_state.step == 0:
+        logger.info(f"Rank {dist.get_rank()}: Saving initial checkpoint (step 0)")
+        timers("save-checkpoint", log_level=0).start(barrier=True)
+        save_checkpoint(
+            state=global_state,
+            model=[model],
+            optimizer=optimizer,
+            opt_param_scheduler=first_scheduler,
+            num_floating_point_operations_so_far=0,
+        )
+        timers("save-checkpoint").stop()
 
     # Main training loop
     timers("interval-time", log_level=0).start(barrier=True)
