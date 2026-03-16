@@ -1004,8 +1004,8 @@ class TestMimoOptimizerLoadCompat:
     def test_reload_model_params_delegates_to_all_active(self):
         mimo_opt, opt_a, opt_b = self._make_mimo_optimizer()
         mimo_opt.reload_model_params(state_dict={"model": {}})
-        opt_a.reload_model_params.assert_called_once_with(state_dict={"model": {}})
-        opt_b.reload_model_params.assert_called_once_with(state_dict={"model": {}})
+        opt_a.reload_model_params.assert_called_once_with({"model": {}})
+        opt_b.reload_model_params.assert_called_once_with({"model": {}})
 
     def test_is_stub_optimizer_when_no_active(self):
         from megatron.core.models.mimo.optimizer import MimoOptimizer, ModuleOptimizerInfo
