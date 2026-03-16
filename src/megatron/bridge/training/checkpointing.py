@@ -1314,6 +1314,7 @@ def load_checkpoint(
     strict: bool = True,
     checkpointing_context: Optional[dict[str, Any]] = None,
     skip_load_to_model_and_opt: bool = False,
+    pg_collection: Optional[ProcessGroupCollection] = None,
 ) -> tuple[int, int]:
     """Load a model checkpoint.
 
@@ -1330,6 +1331,9 @@ def load_checkpoint(
         checkpointing_context: Dictionary to store context across loads (e.g., strategies).
         skip_load_to_model_and_opt: If True, only loads metadata (iteration, rng) but
                                       skips loading state into model and optimizer modules.
+        pg_collection: Optional ProcessGroupCollection. When provided, uses this instead of
+                      extracting from model via get_pg_collection(). Required for MiMo where
+                      model-level PG extraction may not reflect rank-local topology.
 
     Returns:
         A tuple containing:
@@ -1352,7 +1356,8 @@ def load_checkpoint(
         cfg.checkpoint.finetune = True
 
     return _load_checkpoint_from_path(
-        load_dir, state, model, optimizer, opt_param_scheduler, strict, checkpointing_context
+        load_dir, state, model, optimizer, opt_param_scheduler, strict, checkpointing_context,
+        pg_collection=pg_collection,
     )
 
 
@@ -1381,6 +1386,7 @@ def _load_checkpoint_from_path(
     checkpointing_context: Optional[dict[str, Any]] = None,
     skip_load_to_model_and_opt: bool = False,
     ignore_ckpt_step: bool = False,
+    pg_collection: Optional[ProcessGroupCollection] = None,
 ) -> tuple[int, int]:
     """Load a checkpoint from a given path.
 
@@ -1396,6 +1402,9 @@ def _load_checkpoint_from_path(
                                       skips loading state into model and optimizer modules.
         ignore_ckpt_step: If True, ignores the ckpt_step config and loads latest checkpoint.
                           Used when loading pretrained checkpoints in PEFT scenarios.
+        pg_collection: Optional ProcessGroupCollection. When provided, uses this instead of
+                      extracting from model via get_pg_collection(). Required for MiMo where
+                      model-level PG extraction may not reflect rank-local topology.
 
     Returns:
         A tuple containing:
@@ -1404,7 +1413,7 @@ def _load_checkpoint_from_path(
     """
     cfg = state.cfg
     model = unwrap_model(model)
-    pg_collection = get_pg_collection(model)
+    pg_collection = pg_collection or get_pg_collection(model)
     ckpt_format = cfg.checkpoint.ckpt_format
 
     # Step 1: Load base checkpoint with rank0=True (torch_dist only)
