@@ -114,9 +114,10 @@ def setup_mimo(
         )
         train_state = TrainState()
         global_state = GlobalState()
-        global_state.cfg = cfg
         global_state._timers = timers
         global_state.train_state = train_state
+
+    global_state.cfg = cfg
 
     logger.info(f"Rank {dist.get_rank()}: Setting up MIMO training")
 
