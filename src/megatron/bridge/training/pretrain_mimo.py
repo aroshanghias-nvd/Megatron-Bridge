@@ -336,6 +336,20 @@ def pretrain_mimo(
     )
     local_pg_collection = active_pgs[0]
 
+    # Bridge MiMo's per-module process groups into Megatron's global parallel
+    # state.  MiMo intentionally skips global MPU init (see
+    # MimoModelProvider.initialize_model_parallel), but checkpoint save/load
+    # paths (sharded_state_dict, ensure_metadata_has_dp_cp_group) rely on the
+    # globals.  For non-colocated MiMo every rank is active in exactly one
+    # module, so we can safely set the globals from that module's collection.
+    from megatron.core import parallel_state as mpu
+
+    mpu._TENSOR_MODEL_PARALLEL_GROUP = local_pg_collection.tp
+    mpu._DATA_PARALLEL_GROUP = local_pg_collection.dp
+    mpu._DATA_PARALLEL_GROUP_WITH_CP = getattr(local_pg_collection, "dp_cp", local_pg_collection.dp)
+    if hasattr(local_pg_collection, "pp"):
+        mpu._PIPELINE_MODEL_PARALLEL_GROUP = local_pg_collection.pp
+
     first_scheduler = next(iter(schedulers.values()), None) if schedulers else None
 
     # Broadened load-intent gating: includes non-persistent resume intent
