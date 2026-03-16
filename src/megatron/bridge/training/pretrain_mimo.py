@@ -16,11 +16,13 @@ import logging
 from dataclasses import dataclass
 from typing import TYPE_CHECKING, Any, Callable, Dict, Iterator, List, Optional
 
+import torch
 import torch.distributed as dist
 from megatron.core.models.mimo import MimoModel
 from megatron.core.pipeline_parallel.multimodule_communicator import MultiModulePipelineCommunicator
 from megatron.core.utils import get_model_config
 
+from megatron.bridge.training.checkpointing import init_checkpointing_context
 from megatron.bridge.training.config import ConfigContainer
 from megatron.bridge.training.mimo_parallel_utils import (
     build_pg_collection_for_schedule,
@@ -55,6 +57,8 @@ class MimoSetupOutput:
         train_data_iterator: Training data iterator.
         valid_data_iterator: Validation data iterator (optional).
         global_state: GlobalState containing timers, config, train_state.
+        checkpointing_context: Dictionary holding checkpoint-related state
+            (save strategy cache, LocalCheckpointManager for local saves).
     """
 
     model: "MimoModel"
@@ -65,6 +69,7 @@ class MimoSetupOutput:
     train_data_iterator: Iterator
     valid_data_iterator: Optional[Iterator]
     global_state: GlobalState
+    checkpointing_context: Dict[str, Any]
 
 
 def setup_mimo(
@@ -181,6 +186,17 @@ def setup_mimo(
         logger.info(f"Rank {dist.get_rank()}: Building data iterators")
         train_data_iterator, valid_data_iterator = build_data_iterators_fn(cfg, mimo_infra)
 
+    # Initialize async checkpoint worker (idempotent if already initialized).
+    global_state.initialize_async_checkpoint_worker()
+
+    # Initialize checkpointing context (save strategy cache + LocalCheckpointManager).
+    checkpointing_context = init_checkpointing_context(cfg.checkpoint)
+
+    # Align start_time across ranks so duration-based exit is consistent.
+    start_time_tensor = torch.tensor([global_state.start_time], dtype=torch.double, device="cuda")
+    dist.all_reduce(start_time_tensor, op=dist.ReduceOp.MIN)
+    global_state.start_time = start_time_tensor.item()
+
     logger.info(f"Rank {dist.get_rank()}: MIMO setup complete")
 
     return MimoSetupOutput(
@@ -192,6 +208,7 @@ def setup_mimo(
         train_data_iterator=train_data_iterator,
         valid_data_iterator=valid_data_iterator,
         global_state=global_state,
+        checkpointing_context=checkpointing_context,
     )
 
 
@@ -234,10 +251,16 @@ def pretrain_mimo(
     # Initialize num-microbatches calculator if not already set.
     from megatron.core import num_microbatches_calculator as nmc
 
+    rampup_batch_size = getattr(cfg.train, "rampup_batch_size", None)
+    assert rampup_batch_size is None, (
+        "Microbatch rampup is not supported in MiMo training. "
+        "Set rampup_batch_size to None."
+    )
+
     if nmc._GLOBAL_NUM_MICROBATCHES_CALCULATOR is None:
         nmc.init_num_microbatches_calculator(
             dist.get_rank(),
-            getattr(cfg.train, "rampup_batch_size", None),
+            rampup_batch_size,
             cfg.train.global_batch_size,
             cfg.train.micro_batch_size,
             cfg.data_parallel_size,
@@ -315,6 +338,7 @@ def pretrain_mimo(
         global_state=setup_output.global_state,
         mimo_infra=setup_output.mimo_infra,
         multimodule_communicator=setup_output.multimodule_communicator,
+        checkpointing_context=setup_output.checkpointing_context,
     )
 
     logger.info("MIMO pretraining completed")
