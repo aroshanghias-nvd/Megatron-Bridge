@@ -251,6 +251,7 @@ def _build_config(
         save=ckpt_dir,
         ckpt_format="torch_dist",
         fully_parallel_save=True,
+        dist_ckpt_optim_fully_reshardable=True,
     )
     if load_dir is not None:
         ckpt_cfg.load = load_dir
