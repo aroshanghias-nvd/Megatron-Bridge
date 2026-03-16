@@ -252,6 +252,10 @@ def _build_config(
         ckpt_format="torch_dist",
         fully_parallel_save=True,
         dist_ckpt_optim_fully_reshardable=True,
+        # MiMo RNG save is not yet supported: each module produces ShardedObject
+        # with key "rng_state" using module-local PP/TP/DP ranks, causing
+        # duplicate shard keys across modules.  Disable until upstream fix.
+        save_rng=False,
     )
     if load_dir is not None:
         ckpt_cfg.load = load_dir
