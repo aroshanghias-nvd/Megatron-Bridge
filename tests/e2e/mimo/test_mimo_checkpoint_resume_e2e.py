@@ -295,7 +295,7 @@ def _run_phase_save(ckpt_dir: str) -> None:
         mimo_provider.num_moe_experts = None
 
     mock_data = _build_mock_data_provider()
-    bridge_opt = BridgeOptimizerConfig(lr=1e-4)
+    bridge_opt = BridgeOptimizerConfig(lr=1e-4, use_distributed_optimizer=True)
     mcore_opt = MCoreOptimizerConfig(
         optimizer="adam", lr=1e-4, min_lr=0.0, weight_decay=0.01,
         clip_grad=1.0, bf16=True, use_distributed_optimizer=True,
@@ -358,7 +358,7 @@ def _run_phase_resume(ckpt_dir: str) -> None:
         mimo_provider.num_moe_experts = None
 
     mock_data = _build_mock_data_provider()
-    bridge_opt = BridgeOptimizerConfig(lr=1e-4)
+    bridge_opt = BridgeOptimizerConfig(lr=1e-4, use_distributed_optimizer=True)
     mcore_opt = MCoreOptimizerConfig(
         optimizer="adam", lr=1e-4, min_lr=0.0, weight_decay=0.01,
         clip_grad=1.0, bf16=True, use_distributed_optimizer=True,
