@@ -11,7 +11,7 @@ from __future__ import annotations
 import time
 from types import SimpleNamespace
 from typing import Any, Dict
-from unittest.mock import Mock, patch
+from unittest.mock import MagicMock, Mock, patch
 
 import pytest
 
@@ -19,6 +19,14 @@ import pytest
 # ---------------------------------------------------------------------------
 # Helpers
 # ---------------------------------------------------------------------------
+
+
+def _make_scheduler_mock() -> MagicMock:
+    """Create a scheduler mock that supports param_groups[0] access."""
+    sched = MagicMock()
+    sched.optimizer.param_groups = [{"lr": 1e-4}]
+    sched.get_lr.return_value = 1e-4
+    return sched
 
 
 def _make_mimo_infra(*, num_active_pgs: int = 1) -> Mock:
@@ -195,6 +203,11 @@ class TestPretrainMimoSetup:
     """Verify pretrain_mimo properly initializes checkpointing runtime."""
 
     @patch("megatron.bridge.training.pretrain_mimo.init_checkpointing_context")
+    @patch("megatron.bridge.training.pretrain_mimo.MultiModulePipelineCommunicator")
+    @patch("megatron.bridge.training.pretrain_mimo.get_model_config")
+    @patch("megatron.bridge.training.pretrain_mimo.validate_no_stub_ranks")
+    @patch("megatron.bridge.training.pretrain_mimo.build_pg_collection_for_schedule")
+    @patch("megatron.bridge.training.pretrain_mimo.get_module_to_grid_tuple")
     @patch("torch.distributed.all_reduce")
     @patch("torch.distributed.get_rank", return_value=0)
     @patch("torch.distributed.get_world_size", return_value=2)
@@ -203,11 +216,21 @@ class TestPretrainMimoSetup:
         mock_world_size,
         mock_get_rank,
         mock_all_reduce,
+        mock_get_grid,
+        mock_build_pg,
+        mock_validate,
+        mock_get_config,
+        mock_communicator,
         mock_init_ctx,
     ):
         from megatron.bridge.training.pretrain_mimo import setup_mimo
 
         mock_init_ctx.return_value = {"test": "context"}
+
+        model_config = Mock()
+        model_config.pipeline_dtype = None
+        model_config.bf16 = True
+        mock_get_config.return_value = model_config
 
         global_state = Mock()
         global_state.start_time = time.time()
@@ -230,18 +253,9 @@ class TestPretrainMimoSetup:
         infra.topology = Mock()
         infra.pg_collections = {"llm": Mock()}
         provider.build_infra.return_value = infra
+        provider.provide_distributed_model.return_value = [Mock()]
 
-        model = Mock()
-        model_config = Mock()
-        model_config.pipeline_dtype = None
-        model_config.bf16 = True
-        provider.provide_distributed_model.return_value = [model]
-
-        with patch("megatron.bridge.training.pretrain_mimo.get_model_config", return_value=model_config):
-            with patch("megatron.bridge.training.pretrain_mimo.validate_no_stub_ranks"):
-                with patch("megatron.bridge.training.pretrain_mimo.build_pg_collection_for_schedule"):
-                    with patch("megatron.bridge.training.pretrain_mimo.get_module_to_grid_tuple"):
-                        result = setup_mimo(cfg, provider, global_state=global_state)
+        result = setup_mimo(cfg, provider, global_state=global_state)
 
         mock_init_ctx.assert_called_once_with(cfg.checkpoint)
         global_state.initialize_async_checkpoint_worker.assert_called_once()
@@ -271,7 +285,13 @@ class TestPretrainMimoSetup:
 class TestNonColocatedGuard:
     """Verify the non-colocated topology assertion in train_mimo."""
 
-    def test_rejects_multiple_active_pgs(self):
+    @patch("megatron.bridge.training.train_mimo.build_pg_collection_for_schedule", return_value=Mock(spec=[]))
+    @patch("megatron.bridge.training.train_mimo.get_module_to_grid_tuple")
+    @patch("megatron.bridge.training.train_mimo.get_model_config")
+    @patch("megatron.bridge.training.train_mimo.prepare_forward_step_func")
+    @patch("megatron.bridge.training.train_mimo.get_num_microbatches", return_value=1)
+    @patch("torch.distributed.get_rank", return_value=0)
+    def test_rejects_multiple_active_pgs(self, *_mocks):
         from megatron.bridge.training.train_mimo import train_mimo
 
         infra = _make_mimo_infra(num_active_pgs=2)
@@ -291,7 +311,13 @@ class TestNonColocatedGuard:
                 checkpointing_context={},
             )
 
-    def test_rejects_zero_active_pgs(self):
+    @patch("megatron.bridge.training.train_mimo.build_pg_collection_for_schedule", return_value=Mock(spec=[]))
+    @patch("megatron.bridge.training.train_mimo.get_module_to_grid_tuple")
+    @patch("megatron.bridge.training.train_mimo.get_model_config")
+    @patch("megatron.bridge.training.train_mimo.prepare_forward_step_func")
+    @patch("megatron.bridge.training.train_mimo.get_num_microbatches", return_value=1)
+    @patch("torch.distributed.get_rank", return_value=0)
+    def test_rejects_zero_active_pgs(self, *_mocks):
         from megatron.bridge.training.train_mimo import train_mimo
 
         infra = _make_mimo_infra(num_active_pgs=0)
@@ -366,7 +392,7 @@ class TestTrainMimoCheckpointIntegration:
             forward_step_func=Mock(),
             model=Mock(),
             optimizer=Mock(),
-            schedulers={"llm": Mock()},
+            schedulers={"llm": _make_scheduler_mock()},
             train_data_iterator=train_iter,
             valid_data_iterator=None,
             global_state=state,
@@ -424,7 +450,7 @@ class TestTrainMimoCheckpointIntegration:
             forward_step_func=Mock(),
             model=Mock(),
             optimizer=Mock(),
-            schedulers={"llm": Mock()},
+            schedulers={"llm": _make_scheduler_mock()},
             train_data_iterator=Mock(),
             valid_data_iterator=None,
             global_state=state,
@@ -479,7 +505,7 @@ class TestTrainMimoCheckpointIntegration:
             forward_step_func=Mock(),
             model=Mock(),
             optimizer=Mock(),
-            schedulers={"llm": Mock()},
+            schedulers={"llm": _make_scheduler_mock()},
             train_data_iterator=Mock(),
             valid_data_iterator=None,
             global_state=state,
@@ -546,7 +572,7 @@ class TestTrainMimoCheckpointIntegration:
                 forward_step_func=Mock(),
                 model=Mock(),
                 optimizer=Mock(),
-                schedulers={"llm": Mock()},
+                schedulers={"llm": _make_scheduler_mock()},
                 train_data_iterator=Mock(),
                 valid_data_iterator=None,
                 global_state=state,
