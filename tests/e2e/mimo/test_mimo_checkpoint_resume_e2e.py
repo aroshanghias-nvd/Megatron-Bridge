@@ -297,6 +297,8 @@ def _run_phase_save(ckpt_dir: str) -> None:
     )
     if not hasattr(mimo_provider, "num_moe_experts"):
         mimo_provider.num_moe_experts = None
+    if not hasattr(mimo_provider, "fp8"):
+        mimo_provider.fp8 = None
 
     mock_data = _build_mock_data_provider()
     bridge_opt = BridgeOptimizerConfig(lr=1e-4, use_distributed_optimizer=True)
@@ -360,6 +362,8 @@ def _run_phase_resume(ckpt_dir: str) -> None:
     )
     if not hasattr(mimo_provider, "num_moe_experts"):
         mimo_provider.num_moe_experts = None
+    if not hasattr(mimo_provider, "fp8"):
+        mimo_provider.fp8 = None
 
     mock_data = _build_mock_data_provider()
     bridge_opt = BridgeOptimizerConfig(lr=1e-4, use_distributed_optimizer=True)
