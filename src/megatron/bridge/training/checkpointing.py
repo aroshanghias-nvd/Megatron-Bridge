@@ -674,6 +674,12 @@ def save_checkpoint(
                         pg_collection.dp_cp,
                         ckpt_cfg.ckpt_assume_constant_structure,
                     )
+            # MiMo + torch_dist can hit known access-pattern validation failures
+            # for nested DDP language model tensors in PP>1 runs when
+            # fully_parallel_save is disabled. Keep validation enabled otherwise.
+            is_mimo = len(model) == 1 and hasattr(model[0], "mimo_config")
+            if is_mimo and ckpt_cfg.ckpt_format == "torch_dist" and not ckpt_cfg.fully_parallel_save:
+                validate_sharding_integrity = False
             # Store save strategy for future checkpoint saves
             if checkpointing_context is not None:
                 checkpointing_context["save_strategy"] = save_strategy
