@@ -1,0 +1,14 @@
+#!/bin/bash
+# Batch script for MiMo e2e tests.
+# Expected env vars (set by the submit_*.sh caller):
+#   CONTAINER  – container image path
+#   MOUNTS     – container mount spec
+#   COMMAND    – the command to run inside the container
+
+set -euo pipefail
+
+srun --ntasks-per-node=1 \
+    --no-container-mount-home \
+    --container-image="${CONTAINER}" \
+    --container-mounts="${MOUNTS}" \
+    bash -c "${COMMAND}"
