@@ -1708,15 +1708,18 @@ def _load_checkpoint_from_path(
                 and optimizer is not None
                 and not getattr(optimizer, "is_stub_optimizer", False)
             ):
-                # DEBUG: inspect optimizer state structure after dist_checkpointing.load
-                _rank = torch.distributed.get_rank() if torch.distributed.is_initialized() else 0
-                _opt_sd = state_dict.get("optimizer", {})
-                print(f"[DEBUG][rank {_rank}] optimizer state_dict top keys: {list(_opt_sd.keys()) if isinstance(_opt_sd, dict) else type(_opt_sd)}", flush=True)
-                if isinstance(_opt_sd, dict):
-                    for _k, _v in _opt_sd.items():
-                        _vkeys = list(_v.keys()) if isinstance(_v, dict) else type(_v)
-                        print(f"[DEBUG][rank {_rank}]   '{_k}' -> {_vkeys}", flush=True)
-                optimizer.load_state_dict(state_dict["optimizer"])
+                # For MiMo with torch_dist, skip optimizer.load_state_dict():
+                # dist_checkpointing only saves common state from rank 0, but
+                # non-colocated MiMo has different common state per rank (each
+                # rank only holds its active module's param_groups).  The sharded
+                # param states are already loaded by dist_checkpointing.load,
+                # and the optimizer was pre-initialized via
+                # sharded_state_dict(is_loading=True).
+                # TODO: Make dist_checkpointing.save collect common state from
+                # all ranks in MiMo, or have MiMo replicate all modules' common
+                # state on every rank during save.  That fix belongs in MCore.
+                if not (ckpt_format == "torch_dist" and _is_mimo):
+                    optimizer.load_state_dict(state_dict["optimizer"])
 
             if opt_param_scheduler is not None:
                 if "lr_scheduler" in state_dict:
