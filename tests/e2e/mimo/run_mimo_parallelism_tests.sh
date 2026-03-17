@@ -45,7 +45,7 @@ declare -a CONFIGS_8GPU=(
     "baseline_dp_only|1|1|4|0|1|1|4|4"
     # "tp2_both|2|1|2|0|2|1|2|4"
     # "tp2_llm_dp_vision|2|1|2|0|1|1|4|4"
-    # "pp2_llm_only|1|2|2|0|1|1|4|4"
+    "pp2_llm_only|1|2|2|0|1|1|4|4"
     # "tp4_both|4|1|1|0|4|1|1|4"
     # "tp4_llm_tp2_vision|4|1|1|0|2|1|2|4"
     # "3d_llm_dp_vision|2|2|1|0|1|1|4|4"

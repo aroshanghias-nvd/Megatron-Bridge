@@ -42,15 +42,7 @@ export COMMAND="\
 export PYTHONPATH=${MBRIDGE}/src:${MBRIDGE}/3rdparty/Megatron-LM && \
 cd ${MBRIDGE} && \
 echo RUN_SHA=\$(git rev-parse --short HEAD) && \
-MIMO_LLM_TP=1 \
-MIMO_LLM_PP=2 \
-MIMO_LLM_DP=2 \
-MIMO_LLM_OFFSET=0 \
-MIMO_VISION_TP=1 \
-MIMO_VISION_PP=1 \
-MIMO_VISION_DP=4 \
-MIMO_VISION_OFFSET=4 \
-python -m torch.distributed.run --nproc_per_node=${NUM_GPUS} tests/e2e/mimo/test_mimo_training_e2e.py"
+bash tests/e2e/mimo/run_mimo_parallelism_tests.sh --gpus ${NUM_GPUS} --config pp2_llm_only"
 
 cd "${MBRIDGE}"
 
