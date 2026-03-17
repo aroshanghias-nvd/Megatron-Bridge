@@ -264,10 +264,7 @@ def _build_config(
         train=train_cfg,
         model=mimo_provider,
         optimizer=opt_config,
-        scheduler=SchedulerConfig(
-            start_weight_decay=0.0, end_weight_decay=0.0,
-            lr_decay_iters=TOTAL_STEPS,
-        ),
+        scheduler=SchedulerConfig(start_weight_decay=0.0, end_weight_decay=0.0),
         dataset=mock_data_provider,
         logger=logger_cfg,
         tokenizer=TokenizerConfig(),
@@ -312,8 +309,13 @@ def _run_phase_save(ckpt_dir: str) -> None:
 
     cfg = _build_config(
         mimo_provider, mock_data, bridge_opt, ckpt_dir,
-        train_iters=SAVE_STEPS, save_interval=SAVE_STEPS,
+        train_iters=TOTAL_STEPS, save_interval=SAVE_STEPS,
     )
+    # Scheduler fields (lr_decay_steps, wd_incr_steps) are derived from
+    # train_iters in __post_init__.  Build with TOTAL_STEPS so the scheduler
+    # config matches the resume phase, then lower train_iters so the training
+    # loop stops after SAVE_STEPS.
+    cfg.train.train_iters = SAVE_STEPS
 
     global_state = GlobalState()
 
