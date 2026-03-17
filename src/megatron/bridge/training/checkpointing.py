@@ -1446,19 +1446,31 @@ def _load_checkpoint_from_path(
             print_rank_0("run_config.yaml not found, extracting config from legacy Megatron-LM checkpoint")
             run_config = _extract_megatron_lm_args_from_state_dict(state_dict)
 
-        ckpt_tp_pp = (
-            run_config["model"]["tensor_model_parallel_size"],
-            run_config["model"]["pipeline_model_parallel_size"],
+        # MiMo manages per-module parallelism via MimoParallelismConfig,
+        # so there is no single global (TP, PP) to compare.  Skip the
+        # compatibility check entirely for MiMo configs.
+        _is_mimo = (
+            "mimo_parallelism_config" in run_config.get("model", {})
+            or hasattr(cfg.model, "mimo_parallelism_config")
         )
-        run_tp_pp = (
-            cfg.model.tensor_model_parallel_size,
-            cfg.model.pipeline_model_parallel_size,
-        )
-        mismatch_msg = "(TP, PP) mismatch after resume ({} vs {} from checkpoint)".format(run_tp_pp, ckpt_tp_pp)
+        if _is_mimo:
+            tp_pp_match = True
+            mismatch_msg = ""
+        else:
+            ckpt_tp_pp = (
+                run_config["model"]["tensor_model_parallel_size"],
+                run_config["model"]["pipeline_model_parallel_size"],
+            )
+            run_tp_pp = (
+                cfg.model.tensor_model_parallel_size,
+                cfg.model.pipeline_model_parallel_size,
+            )
+            tp_pp_match = ckpt_tp_pp == run_tp_pp
+            mismatch_msg = "(TP, PP) mismatch after resume ({} vs {} from checkpoint)".format(run_tp_pp, ckpt_tp_pp)
 
         # Determine if RNG state will be loaded
         if (
-            ckpt_tp_pp == run_tp_pp
+            tp_pp_match
             and not release
             and not cfg.checkpoint.finetune
             and cfg.checkpoint.load_rng
@@ -1470,7 +1482,7 @@ def _load_checkpoint_from_path(
         else:
             ignore_rng_state = True
             gen_sd_rng_state = None
-            if ckpt_tp_pp != run_tp_pp:
+            if not tp_pp_match:
                 print_rank_0("{}: RNG state will be ignored".format(mismatch_msg))
 
         sharded_sd_metadata = dist_checkpointing.load_content_metadata(preloaded_state_dict=state_dict)
@@ -1496,7 +1508,7 @@ def _load_checkpoint_from_path(
                         ),
                     }
                 if (
-                    ckpt_tp_pp != run_tp_pp
+                    not tp_pp_match
                     and sharded_sd_metadata["distrib_optim_sharding_type"]
                     not in DistributedOptimizer.checkpoint_fully_reshardable_formats
                 ):
@@ -1511,7 +1523,7 @@ def _load_checkpoint_from_path(
 
         # Determine if rerun state will be loaded
         if (
-            ckpt_tp_pp == run_tp_pp
+            tp_pp_match
             and not release
             and not cfg.checkpoint.finetune
             and "rerun_state_machine" in state_dict
@@ -1523,7 +1535,7 @@ def _load_checkpoint_from_path(
             ignore_rerun_state = False
         else:
             gen_sd_rerun_state = None
-            if ckpt_tp_pp != run_tp_pp:
+            if not tp_pp_match:
                 print_rank_0("{}: Rerun state will be ignored".format(mismatch_msg))
 
         sharded_sd_metadata["dp_cp_group"] = pg_collection.dp_cp
