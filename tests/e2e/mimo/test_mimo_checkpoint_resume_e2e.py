@@ -246,11 +246,14 @@ def _build_config(
     logger_cfg = LoggerConfig()
     logger_cfg.log_interval = 1
 
+    llm_pp = par_cfg.module_parallelisms["llm"].pipeline_model_parallel_size
     ckpt_cfg = CheckpointConfig(
         save_interval=save_interval,
         save=ckpt_dir,
         ckpt_format="torch_dist",
-        fully_parallel_save=True,
+        # TODO: Re-enable fully_parallel_save for PP>1 after fixing MIMO sharded
+        # checkpoint access pattern validation for nested DDP language model params.
+        fully_parallel_save=(llm_pp == 1),
         dist_ckpt_optim_fully_reshardable=True,
         # MiMo RNG save is not yet supported: each module produces ShardedObject
         # with key "rng_state" using module-local PP/TP/DP ranks, causing
