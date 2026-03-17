@@ -1708,6 +1708,12 @@ def _load_checkpoint_from_path(
                 and optimizer is not None
                 and not getattr(optimizer, "is_stub_optimizer", False)
             ):
+                # DEBUG: inspect optimizer state structure after dist_checkpointing.load
+                _opt_sd = state_dict.get("optimizer", {})
+                print_rank_0(f"[DEBUG] optimizer state_dict top keys: {list(_opt_sd.keys()) if isinstance(_opt_sd, dict) else type(_opt_sd)}")
+                if isinstance(_opt_sd, dict):
+                    for _k, _v in _opt_sd.items():
+                        print_rank_0(f"[DEBUG]   '{_k}' -> {list(_v.keys()) if isinstance(_v, dict) else type(_v)}")
                 optimizer.load_state_dict(state_dict["optimizer"])
 
             if opt_param_scheduler is not None:
