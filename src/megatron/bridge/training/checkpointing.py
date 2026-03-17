@@ -1431,6 +1431,7 @@ def _load_checkpoint_from_path(
             checkpointing_context=checkpointing_context,
             ignore_ckpt_step=ignore_ckpt_step,
             cfg=cfg,
+            is_mimo=False,
             pg_collection=pg_collection,
         )
 
@@ -1655,6 +1656,7 @@ def _load_checkpoint_from_path(
         checkpointing_context=checkpointing_context,
         ignore_ckpt_step=ignore_ckpt_step,
         cfg=cfg,
+        is_mimo=(_is_mimo if ckpt_format == "torch_dist" else False),
         pg_collection=pg_collection,
         **load_kwargs,
     )
@@ -2101,6 +2103,7 @@ def _load_global_dist_base_checkpoint(
     iteration: int,
     release: bool,
     checkpointing_context: Optional[dict[str, Any]] = None,
+    is_mimo: bool = False,
     *,
     pg_collection: ProcessGroupCollection,
 ) -> tuple[dict[str, Any], str, bool, CheckpointType]:
@@ -2119,8 +2122,15 @@ def _load_global_dist_base_checkpoint(
         load_strategy = FullyParallelLoadStrategyWrapper(load_strategy, pg_collection.dp_cp)
     if checkpointing_context is not None:
         checkpointing_context["load_strategy"] = load_strategy
+    validate_sharding_integrity = True
+    if is_mimo and ckpt_cfg.ckpt_format == "torch_dist" and not ckpt_cfg.fully_parallel_save:
+        validate_sharding_integrity = False
     state_dict = dist_checkpointing.load(
-        sharded_state_dict, checkpoint_name, load_strategy, strict=ckpt_cfg.dist_ckpt_strictness
+        sharded_state_dict,
+        checkpoint_name,
+        load_strategy,
+        strict=ckpt_cfg.dist_ckpt_strictness,
+        validate_access_integrity=validate_sharding_integrity,
     )
     return state_dict, checkpoint_name, release, CheckpointType.GLOBAL
 
@@ -2133,6 +2143,7 @@ def _load_base_checkpoint(
     checkpointing_context: Optional[dict[str, Any]] = None,
     ignore_ckpt_step: bool = False,
     cfg: Optional[ConfigContainer] = None,
+    is_mimo: bool = False,
     *,
     pg_collection: ProcessGroupCollection,
 ) -> tuple[Optional[dict[str, Any]], str, bool, Optional[CheckpointType]]:
@@ -2221,6 +2232,7 @@ def _load_base_checkpoint(
             iteration,
             release,
             checkpointing_context=checkpointing_context,
+            is_mimo=is_mimo,
             pg_collection=pg_collection,
         )
     elif ckpt_format == "fsdp_dtensor":
