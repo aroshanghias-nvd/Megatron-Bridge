@@ -82,6 +82,8 @@ def _make_vision_config() -> TransformerConfig:
     cfg.attention_softmax_in_fp32 = True
     cfg.normalization = "LayerNorm"
     cfg.apply_rope_fusion = False
+    # CLIP uses "quick_gelu", not standard gelu
+    cfg.activation_func = lambda x: x * torch.sigmoid(1.702 * x)
     return cfg
 
 
@@ -483,6 +485,107 @@ def _build_config(
 from megatron.bridge.training.pretrain import pretrain
 
 
+# ---------------------------------------------------------------------------
+# Per-submodule checkpoint loading
+# ---------------------------------------------------------------------------
+
+
+def _load_tp_rank_weights(
+    module: torch.nn.Module,
+    ckpt_dir: str,
+    tp_rank: int,
+    label: str,
+) -> None:
+    """Load per-TP-rank ``.pt`` weights produced by the HF→Megatron converters.
+
+    Both ``convert_hf_clip_to_megatron.py`` and ``convert_hf_llama_to_megatron.py``
+    write the same layout::
+
+        {ckpt_dir}/tp_rank_{NN}/model_weights.pt   →  {"model": {key: tensor}}
+
+    After loading, a spot-check compares up to 5 parameter tensors against the
+    file to verify the weights actually landed in the module.
+    """
+    ckpt_file = os.path.join(ckpt_dir, f"tp_rank_{tp_rank:02d}", "model_weights.pt")
+    if not os.path.exists(ckpt_file):
+        raise FileNotFoundError(f"[{label}] Checkpoint not found: {ckpt_file}")
+
+    saved = torch.load(ckpt_file, map_location="cpu", weights_only=True)
+    state_dict = {k: v for k, v in saved["model"].items() if v is not None}
+
+    incompat = module.load_state_dict(state_dict, strict=False)
+    unexpected = [k for k in incompat.unexpected_keys if "_extra_state" not in k]
+    missing = [k for k in incompat.missing_keys if "_extra_state" not in k]
+    if unexpected or missing:
+        raise RuntimeError(
+            f"[{label}] load_state_dict mismatch.\n  Missing:    {missing}\n  Unexpected: {unexpected}"
+        )
+
+    # Spot-check: re-read module state and compare against checkpoint tensors
+    model_sd = module.state_dict()
+    checked = 0
+    for key, ref_tensor in state_dict.items():
+        if key not in model_sd or ref_tensor is None:
+            continue
+        if not torch.equal(model_sd[key].float().cpu(), ref_tensor.float().cpu()):
+            max_diff = (model_sd[key].float().cpu() - ref_tensor.float().cpu()).abs().max().item()
+            raise RuntimeError(
+                f"[{label}] Weight verification FAILED for '{key}': max abs diff = {max_diff}"
+            )
+        checked += 1
+        if checked >= 5:
+            break
+    if checked == 0:
+        raise RuntimeError(f"[{label}] Weight verification found 0 overlapping keys to check")
+    print(f"[{label}] Loaded and verified from {ckpt_file} ({checked} keys spot-checked)")
+
+
+def _make_checkpoint_loader_hook(
+    language_model_ckpt: str | None = None,
+    vision_encoder_ckpt: str | None = None,
+):
+    """Return a ``pre_wrap_hook`` that loads per-module checkpoints.
+
+    In homogeneous MIMO every rank materialises all modules, so both the
+    language model and vision encoder are always present.  The hook uses
+    ``parallel_state`` to determine the TP rank (shared across all modules
+    in homogeneous mode).
+
+    Both checkpoint dirs are expected to contain per-TP-rank ``.pt`` files
+    produced by ``convert_hf_llama_to_megatron.py`` / ``convert_hf_clip_to_megatron.py``.
+    """
+
+    def _hook(model_list):
+        from megatron.core import parallel_state
+
+        model = model_list[0]
+        tp_rank = parallel_state.get_tensor_model_parallel_rank()
+        tp_size = parallel_state.get_tensor_model_parallel_world_size()
+
+        if language_model_ckpt and model.language_model is not None:
+            _load_tp_rank_weights(
+                model.language_model,
+                language_model_ckpt,
+                tp_rank,
+                label=f"LLM tp_rank={tp_rank}/{tp_size}",
+            )
+
+        if vision_encoder_ckpt and "images" in model.modality_submodules:
+            images_sub = model.modality_submodules["images"]
+            encoder = getattr(images_sub.encoders, "clip", None) if hasattr(images_sub, "encoders") else None
+            if encoder is not None:
+                _load_tp_rank_weights(
+                    encoder,
+                    vision_encoder_ckpt,
+                    tp_rank,
+                    label=f"CLIP tp_rank={tp_rank}/{tp_size}",
+                )
+
+        return model_list
+
+    return _hook
+
+
 _rank_log_file = None
 
 
@@ -520,6 +623,18 @@ def parse_args():
         "--lr-warmup-iters", type=int, default=20, help="Number of iterations to linearly warmup learning rate"
     )
     parser.add_argument("--dataset-root", type=str, required=True, help="Root directory of the LLaVA-Pretrain dataset")
+    parser.add_argument(
+        "--vision-encoder-checkpoint",
+        type=str,
+        default=None,
+        help="Path to pre-converted CLIP ViT checkpoint (TP-sharded, with tp_rank_XX/model_weights.pt)",
+    )
+    parser.add_argument(
+        "--language-model-checkpoint",
+        type=str,
+        default=None,
+        help="Path to pre-converted LLM checkpoint (TP-sharded, with tp_rank_XX/model_weights.pt)",
+    )
     return parser.parse_args()
 
 
@@ -569,7 +684,22 @@ def main():
         bf16=True,
         vocab_size=VOCAB_SIZE,
         seq_length=MAX_SEQ_LENGTH,
+        freeze_language_model=True,
+        freeze_modality_encoders={"images": True},
     )
+    # Register per-module checkpoint loading hook (runs before DDP wrapping)
+    if args.language_model_checkpoint or args.vision_encoder_checkpoint:
+        mimo_provider.register_pre_wrap_hook(
+            _make_checkpoint_loader_hook(
+                language_model_ckpt=args.language_model_checkpoint,
+                vision_encoder_ckpt=args.vision_encoder_checkpoint,
+            )
+        )
+        _log(
+            f"Registered checkpoint hooks: "
+            f"LLM={args.language_model_checkpoint}, "
+            f"vision={args.vision_encoder_checkpoint}"
+        )
 
     # 3. Build data provider
     _log("building data provider")
