@@ -264,7 +264,10 @@ def _build_config(
         train=train_cfg,
         model=mimo_provider,
         optimizer=opt_config,
-        scheduler=SchedulerConfig(start_weight_decay=0.0, end_weight_decay=0.0),
+        scheduler=SchedulerConfig(
+            start_weight_decay=0.0, end_weight_decay=0.0,
+            lr_decay_iters=TOTAL_STEPS,
+        ),
         dataset=mock_data_provider,
         logger=logger_cfg,
         tokenizer=TokenizerConfig(),
