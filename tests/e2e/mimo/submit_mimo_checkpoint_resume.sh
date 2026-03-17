@@ -7,6 +7,7 @@
 #
 # Usage:
 #   MBRIDGE=/path/to/Megatron-Bridge bash submit_mimo_checkpoint_resume.sh
+#   MBRIDGE=/path/to/Megatron-Bridge MIMO_CONFIG=pp2_llm_dp4_vision bash submit_mimo_checkpoint_resume.sh
 # =============================================================================
 
 MBRIDGE=${MBRIDGE:-$(cd "$(dirname "${BASH_SOURCE[0]}")"/../../.. && pwd)}
@@ -25,11 +26,16 @@ else
     export CONTAINER="/lustre/fs1/portfolios/coreai/projects/coreai_dlalgo_genai/users/ykarnati/containers/mcore_ci_dev_39951663.sqsh"
 fi
 
+CONFIG_FLAG=""
+if [ -n "${MIMO_CONFIG:-}" ]; then
+    CONFIG_FLAG="--config ${MIMO_CONFIG}"
+fi
+
 export COMMAND="\
 export PYTHONPATH=${MBRIDGE}/src:${MBRIDGE}/3rdparty/Megatron-LM && \
 cd ${MBRIDGE} && \
 echo RUN_SHA=\$(git rev-parse --short HEAD) && \
-bash tests/e2e/mimo/run_mimo_checkpoint_resume.sh --gpus ${NUM_GPUS}"
+bash tests/e2e/mimo/run_mimo_checkpoint_resume.sh --gpus ${NUM_GPUS} ${CONFIG_FLAG}"
 
 export MOUNTS="/lustre/fsw/:/lustre/fsw/,/lustre/fs1:/lustre/fs1"
 
@@ -60,6 +66,9 @@ echo "  Partition: ${PARTITION}"
 echo "  GPUs:      ${NUM_GPUS}"
 echo "  Container: ${CONTAINER}"
 echo "  Time:      ${TIME_LIMIT}"
+if [ -n "${MIMO_CONFIG:-}" ]; then
+    echo "  Config:    ${MIMO_CONFIG}"
+fi
 echo ""
 echo "  Stdout: ${RESOLVED_SLURM_OUT}"
 echo "  Stderr: ${RESOLVED_SLURM_ERR}"

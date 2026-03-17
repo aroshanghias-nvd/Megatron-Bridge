@@ -38,9 +38,7 @@ declare -a CONFIGS_8GPU=(
     "dp4_both|1|1|4|0|1|1|4|4"
     "tp4_both|4|1|1|0|4|1|1|4"
     "tp2_dp2_both|2|1|2|0|2|1|2|4"
-    # PP>1 for LLM is broken in MiMo forward pass (embedding receives None
-    # on non-first pipeline stages).  See docs/bugs/mimo-pp-embedding-none-input.md
-    # "pp2_llm_dp4_vision|1|2|2|0|1|1|4|4"
+    "pp2_llm_dp4_vision|1|2|2|0|1|1|4|4"
 )
 
 declare -a CONFIGS_4GPU=(
