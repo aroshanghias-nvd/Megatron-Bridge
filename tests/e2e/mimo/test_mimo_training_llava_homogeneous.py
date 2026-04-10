@@ -475,6 +475,11 @@ def _build_config(
         validation=ValidationConfig(eval_interval=2, eval_iters=0),
     )
     cfg.rng.seed = seed
+    # data_parallel_size=1 because the sampler does not shard by DP.
+    # All data-loading ranks receive identical global micro-batches;
+    # per-module DP sub-sharding is handled by slice_batch_for_mimo in the
+    # forward step.  num_microbatches = global_batch_size / micro_batch_size.
+    cfg.data_parallel_size = 1
     return cfg
 
 

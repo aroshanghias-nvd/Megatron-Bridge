@@ -1,8 +1,8 @@
 #!/bin/bash
-# Homogeneous MIMO LLaVA training — all modules on every rank (TP=4, DP=2).
-# 8 GPUs: every rank runs both LLM and CLIP ViT encoder together.
+# Homogeneous MIMO LLaVA training — all modules on every rank (TP=4, DP=1).
+# 4 GPUs: every rank runs both LLM and CLIP ViT encoder together.
 
-GPUS_PER_NODE=8
+GPUS_PER_NODE=4 # Deliberately set to 4 for homogeneous test, even if the machine has 8 GPUs to get DP=1 and TP=4.
 NUM_NODES=1
 
 uv run torchrun \
