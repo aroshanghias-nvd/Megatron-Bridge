@@ -427,6 +427,7 @@ def _build_config(
     wandb_entity: str | None = None,
     wandb_save_dir: str | None = None,
     lr_warmup_iters: int = 0,
+    seed: int = 42,
 ) -> ConfigContainer:
     train_cfg = TrainingConfig(
         micro_batch_size=micro_batch_size,
@@ -473,6 +474,7 @@ def _build_config(
         checkpoint=CheckpointConfig(),
         validation=ValidationConfig(eval_interval=2, eval_iters=0),
     )
+    cfg.rng.seed = seed
     return cfg
 
 
@@ -813,6 +815,7 @@ def main():
         wandb_entity=args.wandb_entity,
         wandb_save_dir=args.wandb_save_dir,
         lr_warmup_iters=args.lr_warmup_iters,
+        seed=seed,
     )
 
     # Configure checkpointing from CLI args
