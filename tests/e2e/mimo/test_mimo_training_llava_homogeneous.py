@@ -710,7 +710,15 @@ def main():
         f"Optimizer config: lr={args.lr}, min_lr={args.min_lr}, weight_decay={args.weight_decay}, "
         f"adam_beta1={args.adam_beta1}, adam_beta2={args.adam_beta2}, clip_grad={args.clip_grad}"
     )
-    opt_config = OptimizerConfig(lr=args.lr, min_lr=args.min_lr, bf16=True)
+    opt_config = OptimizerConfig(
+        lr=args.lr,
+        min_lr=args.min_lr,
+        weight_decay=args.weight_decay,
+        adam_beta1=args.adam_beta1,
+        adam_beta2=args.adam_beta2,
+        clip_grad=args.clip_grad,
+        bf16=True,
+    )
 
     # 5. Build config container
     _log("building config")
