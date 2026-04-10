@@ -34,13 +34,6 @@ from megatron.core.models.vision.vit_layer_specs import get_vit_layer_with_trans
 from megatron.core.transformer.mlp import MLPSubmodules
 from megatron.core.transformer.spec_utils import ModuleSpec
 from megatron.core.transformer.transformer_config import TransformerConfig
-from test_mimo_training_llava import (
-    _ENCODER_SEQ_LEN,
-    IMAGE_SPECIAL_TOKEN_ID,
-    MAX_SEQ_LENGTH,
-    VOCAB_SIZE,
-    _build_model_specs,
-)
 
 
 # ---------------------------------------------------------------------------
