@@ -633,6 +633,9 @@ def parse_args():
         default=None,
         help="Path to pre-converted LLM checkpoint (TP-sharded, with tp_rank_XX/model_weights.pt)",
     )
+    parser.add_argument("--freeze-vision", type=bool, default=True, help="Freeze the vision encoder (default: True)")
+    parser.add_argument("--freeze-llm", type=bool, default=True, help="Freeze the language model (default: True)")
+    parser.add_argument("--freeze-projector", type=bool, default=False, help="Freeze the projector (default: False)")
     return parser.parse_args()
 
 
@@ -648,7 +651,7 @@ def main():
     torch.cuda.set_device(local_rank)
 
     # Seed all RNGs for reproducible weight initialization
-    seed = 40
+    seed = 42
     random.seed(seed)
     np.random.seed(seed)
     torch.manual_seed(seed)
@@ -682,8 +685,9 @@ def main():
         bf16=True,
         vocab_size=VOCAB_SIZE,
         seq_length=MAX_SEQ_LENGTH,
-        freeze_language_model=True,
-        freeze_modality_encoders={"images": True},
+        freeze_language_model=args.freeze_llm,
+        freeze_modality_encoders={"images": args.freeze_vision},
+        freeze_modality_projections={"images": args.freeze_projector},
     )
     # Register per-module checkpoint loading hook (runs before DDP wrapping)
     if args.language_model_checkpoint or args.vision_encoder_checkpoint:
