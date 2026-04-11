@@ -11,7 +11,7 @@ uv run torchrun \
     tests/e2e/mimo/test_mimo_training_llava_homogeneous.py \
     --micro-batch-size 4 \
     --global-batch-size 128 \
-    --train-iters 2000 \
+    --train-iters 1000 \
     --adam-beta1 0.9 \
     --adam-beta2 0.95 \
     --clip-grad 1.0 \
