@@ -35,6 +35,16 @@ from megatron.core.transformer.mlp import MLPSubmodules
 from megatron.core.transformer.spec_utils import ModuleSpec
 from megatron.core.transformer.transformer_config import TransformerConfig
 
+from typing import Optional
+
+
+class CLIPViTNoCLS(CLIPViTModel):
+    """CLIPViTModel that drops the CLS token to match HF LLaVA (mm_vision_select_feature='patch')."""
+
+    def forward(self, x: torch.Tensor, attention_mask: Optional[torch.Tensor] = None) -> torch.Tensor:
+        x = super().forward(x, attention_mask=attention_mask)
+        return x[:, self.class_token_len :, :]
+
 
 # ---------------------------------------------------------------------------
 # LLaVA model configs (Vicuna-7B + CLIP ViT-L/14 + MLP projection)
@@ -46,14 +56,14 @@ CLIP_OUTPUT_DIM = 1024  # CLIP ViT-L/14 hidden size
 MAX_SEQ_LENGTH = 4096
 _IMG_SIZE = 336
 _PATCH_DIM = 14
-# CLIP ViT-L/14 @ 336×336: (336/14)^2 = 576 patches + 1 class token = 577
-_ENCODER_SEQ_LEN = 577
+# CLIP ViT-L/14 @ 336×336: (336/14)^2 = 576 patches (CLS token dropped per HF LLaVA)
+_ENCODER_SEQ_LEN = 576
 
 
 def _make_vision_config() -> TransformerConfig:
-    """CLIP ViT-L/14 vision encoder config."""
+    """CLIP ViT-L/14 vision encoder config (23 layers = penultimate layer output per HF LLaVA)."""
     cfg = TransformerConfig(
-        num_layers=24,
+        num_layers=23,
         hidden_size=1024,
         ffn_hidden_size=4096,
         num_attention_heads=16,
@@ -149,7 +159,7 @@ def _build_model_specs():
 
     # CLIP ViT-L/14 encoder
     vision_encoder = ModuleSpec(
-        module=CLIPViTModel,
+        module=CLIPViTNoCLS,
         params={
             "transformer_config": vision_config,
             "transformer_layer_spec": get_vit_layer_with_transformer_engine_spec(),
@@ -679,6 +689,17 @@ def _log(msg):
     print(line, end="", flush=True)
 
 
+def _str2bool(v):
+    """Parse boolean values from command line arguments."""
+    if isinstance(v, bool):
+        return v
+    if v.lower() in ("yes", "true", "t", "1"):
+        return True
+    if v.lower() in ("no", "false", "f", "0"):
+        return False
+    raise argparse.ArgumentTypeError(f"Boolean value expected, got '{v}'")
+
+
 def parse_args():
     parser = argparse.ArgumentParser(description="Homogeneous MIMO LLaVA training")
     parser.add_argument("--micro-batch-size", type=int, default=1, help="Micro batch size per GPU")
@@ -714,9 +735,9 @@ def parse_args():
         default=None,
         help="Path to pre-converted LLM checkpoint (TP-sharded, with tp_rank_XX/model_weights.pt)",
     )
-    parser.add_argument("--freeze-vision", type=bool, default=True, help="Freeze the vision encoder (default: True)")
-    parser.add_argument("--freeze-llm", type=bool, default=True, help="Freeze the language model (default: True)")
-    parser.add_argument("--freeze-projector", type=bool, default=False, help="Freeze the projector (default: False)")
+    parser.add_argument("--freeze-vision", type=_str2bool, default=True, help="Freeze the vision encoder (default: True)")
+    parser.add_argument("--freeze-llm", type=_str2bool, default=True, help="Freeze the language model (default: True)")
+    parser.add_argument("--freeze-projector", type=_str2bool, default=False, help="Freeze the projector (default: False)")
     return parser.parse_args()
 
 
