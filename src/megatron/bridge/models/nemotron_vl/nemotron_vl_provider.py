@@ -13,6 +13,8 @@
 # limitations under the License.
 
 import copy
+import inspect
+import logging
 from abc import ABC
 from dataclasses import dataclass
 from typing import Any, Optional
@@ -28,6 +30,37 @@ from megatron.bridge.models.nemotronh.nemotron_h_provider import (
     NemotronNanoModelProvider12Bv2,
     NemotronNanoModelProviderNext3Bv3,
 )
+
+
+_LOGGER = logging.getLogger(__name__)
+_FILTERED_KWARGS_LOGGED = False
+
+
+def filter_llava_kwargs(kwargs: dict) -> dict:
+    """Drop ``LLaVAModel`` kwargs the imported Megatron-LM does not accept.
+
+    Different Megatron-LM pins expose slightly different ``LLaVAModel.__init__``
+    signatures (for example ``hybrid_attention_ratio`` / ``hybrid_mlp_ratio``
+    were removed on Super's ``super-vlm2`` Megatron-LM in favor of the
+    ``hybrid_override_pattern`` allocator). This filter introspects the
+    runtime signature and silently drops kwargs that the active LM does
+    not accept, so a single Bridge can support both Omni-style and
+    Super-style Megatron-LM pins without forking provider code.
+
+    The set of dropped kwargs is logged once at WARNING level the first
+    time it is non-empty in this process, so the choice is visible at
+    runtime without spamming the logs on every model build.
+    """
+    global _FILTERED_KWARGS_LOGGED
+    accepted = set(inspect.signature(LLaVAModel.__init__).parameters)
+    dropped = sorted(k for k in kwargs if k not in accepted)
+    if dropped and not _FILTERED_KWARGS_LOGGED:
+        _LOGGER.warning(
+            "Dropping LLaVAModel kwargs not in current Megatron-LM signature: %s",
+            dropped,
+        )
+        _FILTERED_KWARGS_LOGGED = True
+    return {k: v for k, v in kwargs.items() if k in accepted}
 
 
 @dataclass
@@ -153,7 +186,7 @@ class NemotronVLModelProvider(ABC):
         # For pipeline parallelism, the vision encoder should only be on the first stage
         add_encoder_flag = parallel_state.is_pipeline_first_stage() if self.pipeline_model_parallel_size > 1 else True
         add_decoder_flag = True
-        llava_model = LLaVAModel(
+        llava_kwargs = dict(
             language_transformer_config=language_cfg,
             language_transformer_layer_spec=language_spec,
             language_vocab_size=self.vocab_size,
@@ -191,6 +224,7 @@ class NemotronVLModelProvider(ABC):
             video_temporal_patch_size=self.video_temporal_patch_size,
             separate_video_embedder=self.separate_video_embedder,
         )
+        llava_model = LLaVAModel(**filter_llava_kwargs(llava_kwargs))
 
         from megatron.bridge.models.nemotron_vl.modeling_nemotron_vl import NemotronVLModel
 

@@ -30,6 +30,7 @@ from megatron.bridge.models.nemotron_vl.nemotron_vl_provider import (
     NemotronNano3Bv3VLModelProvider,
     NemotronNano12Bv2VLModelProvider,
     NemotronVLModelProvider,
+    filter_llava_kwargs,
 )
 
 
@@ -121,7 +122,7 @@ class NemotronOmniModelProvider(NemotronVLModelProvider, ABC):
                 input_size=self.sound_hidden_size,
             )
 
-        llava_model = LLaVAModel(
+        llava_kwargs = dict(
             language_transformer_config=language_cfg,
             language_transformer_layer_spec=language_spec,
             language_vocab_size=self.vocab_size,
@@ -162,6 +163,7 @@ class NemotronOmniModelProvider(NemotronVLModelProvider, ABC):
             sound_projection=sound_projection,
             sound_token_index=sound_token_index,
         )
+        llava_model = LLaVAModel(**filter_llava_kwargs(llava_kwargs))
 
         model = NemotronOmniModel(llava_model=llava_model)
 
