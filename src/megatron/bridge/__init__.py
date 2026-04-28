@@ -13,6 +13,16 @@
 # limitations under the License.
 """Megatron Bridge - A component of the Megatron ecosystem."""
 
+# IMPORTANT: ``_mlm_compat`` MUST be imported before any other Bridge
+# module so its ``sys.modules`` polyfills land before transitive
+# ``from megatron.core...`` imports inside Bridge (and inside Bridge's
+# downstream consumers like nemo-rl-super) try to resolve symbols that
+# were introduced in newer Megatron-LM revisions but are missing from
+# the older revision pinned by some downstream consumers. The compat
+# layer is a no-op against any Megatron-LM that already exposes those
+# symbols.
+from megatron.bridge import _mlm_compat as _mlm_compat  # noqa: F401
+
 from megatron.bridge.models.conversion.auto_bridge import AutoBridge
 from megatron.bridge.package_info import (
     __contact_emails__,

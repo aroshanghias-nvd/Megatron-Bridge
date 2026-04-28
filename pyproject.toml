@@ -80,7 +80,16 @@ dependencies = [
     "hydra-core>1.3,<=1.3.2",
     "megatron-core[dev,mlm]>=0.15.0a0,<0.17.0",
     "qwen-vl-utils",
-    "transformer-engine[pytorch]>=2.9.0a0,<2.10.0",
+    # NOTE: bare ``transformer-engine`` (no ``[pytorch]`` extra). uv
+    # cannot build ``transformer-engine-torch`` from source in its
+    # ``--no-build-isolation`` sandbox (missing ``build_tools`` on
+    # ``sys.path``, missing CUDA headers). Consumers of Bridge need to
+    # install ``transformer-engine-cu12`` and ``transformer-engine-torch``
+    # via plain ``pip install --no-deps --no-build-isolation`` after the
+    # workspace ``uv sync`` has run -- see
+    # ``nemo-rl-super/nemo_rl/utils/venvs.py:create_local_venv`` for the
+    # canonical four-step pattern (mirrored from ``nemo-rl-omni``).
+    "transformer-engine>=2.9.0a0,<2.10.0",
     "mamba-ssm",
     "nvidia-resiliency-ext",
     "causal-conv1d",
@@ -110,7 +119,9 @@ override-dependencies = [
     "torch; sys_platform == 'never'",
     "torchvision; sys_platform == 'never'",
     "triton; sys_platform == 'never'",
-    "transformer-engine[pytorch]>=2.9.0a0,<2.10.0",
+    # NOTE: bare ``transformer-engine`` (no ``[pytorch]`` extra) for the
+    # same reason as the dependencies block above.
+    "transformer-engine>=2.9.0a0,<2.10.0",
 ]
 
 # uv.sources allows us to override dependencies with VCS commits.

@@ -14,6 +14,12 @@
 
 from typing import Union
 
+# ``ProcessGroupCollection`` may be polyfilled by
+# ``megatron.bridge._mlm_compat`` against older Megatron-LM revisions
+# that ship only ``ModelCommProcessGroups`` + ``GradCommProcessGroups``
+# (not yet consolidated into ``ProcessGroupCollection``). The compat
+# layer is loaded as a side-effect of ``import megatron.bridge`` and is
+# a no-op on newer Megatron-LM that exposes the real class.
 from megatron.core.process_groups_config import ProcessGroupCollection
 from megatron.core.transformer import MegatronModule
 from megatron.core.utils import get_attr_wrapped_model
