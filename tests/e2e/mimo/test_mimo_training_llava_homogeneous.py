@@ -476,11 +476,16 @@ def forward_step_func(data_iterator, model):
     if batch_loss_mask is not None:
         batch_loss_mask = batch_loss_mask.cuda(non_blocking=True)
 
+    unwrapped = model
+    while hasattr(unwrapped, "module") and not hasattr(unwrapped, "language_model"):
+        unwrapped = unwrapped.module
+    pipeline_dtype = unwrapped.language_model.config.pipeline_dtype
+
     modality_inputs = {}
     if "modality_inputs" in batch:
         for mod_name, mod_tensors in batch["modality_inputs"].items():
             modality_inputs[mod_name] = {
-                "clip": {"x": mod_tensors["pixel_values"].cuda(non_blocking=True).to(getattr(model, 'module', model).language_model.config.pipeline_dtype)}
+                "clip": {"x": mod_tensors["pixel_values"].cuda(non_blocking=True).to(pipeline_dtype)}
             }
 
     output = model(
