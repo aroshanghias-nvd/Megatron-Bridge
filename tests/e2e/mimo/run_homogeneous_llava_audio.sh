@@ -39,7 +39,7 @@ uv run torchrun \
     --nnodes "$NUM_NODES" \
     tests/e2e/mimo/test_mimo_training_llava_homogeneous_audio.py \
     --micro-batch-size 4 \
-    --global-batch-size 128 \
+    --global-batch-size 96 \
     --train-iters 100 \
     --adam-beta1 0.9 \
     --adam-beta2 0.95 \
