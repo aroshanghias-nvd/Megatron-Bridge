@@ -840,6 +840,7 @@ def _build_config(
         grad_reduce_in_fp32=deterministic,
         overlap_grad_reduce=False,
         check_for_nan_in_grad=False,
+        use_distributed_optimizer=True,
     )
 
     cfg = ConfigContainer(
@@ -858,6 +859,7 @@ def _build_config(
         validation=ValidationConfig(eval_interval=2, eval_iters=0),
     )
     cfg.rng.seed = seed
+    cfg.optimizer.use_distributed_optimizer = True
     # data_parallel_size=1 because the sampler does not shard by DP.
     # All data-loading ranks receive identical global micro-batches;
     # per-module DP sub-sharding is handled by slice_batch_for_mimo in the
