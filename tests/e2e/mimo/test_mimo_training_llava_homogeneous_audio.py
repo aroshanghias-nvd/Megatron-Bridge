@@ -723,7 +723,10 @@ def forward_step_func(data_iterator, model):
     if batch_loss_mask is not None:
         batch_loss_mask = batch_loss_mask.cuda(non_blocking=True)
 
-    pipeline_dtype = getattr(model, "module", model).language_model.config.pipeline_dtype
+    unwrapped = model
+    while hasattr(unwrapped, "module"):
+        unwrapped = unwrapped.module
+    pipeline_dtype = unwrapped.language_model.config.pipeline_dtype
 
     modality_inputs: dict = {}
     raw_modality_inputs = batch.get("modality_inputs") or {}
@@ -1168,6 +1171,7 @@ def main():
     torch.cuda.set_device(local_rank)
     if args.deterministic:
         torch.use_deterministic_algorithms(True)
+        torch.backends.cudnn.deterministic = True
         torch.backends.cudnn.benchmark = False
         torch.backends.cuda.matmul.allow_tf32 = False
         torch.backends.cudnn.allow_tf32 = False
