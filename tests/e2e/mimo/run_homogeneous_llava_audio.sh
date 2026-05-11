@@ -43,7 +43,7 @@ fi
 uv run torchrun \
     --nproc_per_node "$GPUS_PER_NODE" \
     --nnodes "$NUM_NODES" \
-    tests/e2e/mimo/test_mimo_training_llava_homogeneous.py \
+    tests/e2e/mimo/test_mimo_training_llava_homogeneous_audio.py \
     --micro-batch-size 4 \
     --global-batch-size 96 \
     --train-iters 100 \
@@ -56,10 +56,13 @@ uv run torchrun \
     --min-lr ${MIN_LR} \
     --weight-decay 0.0 \
     --wandb-project "Megatron-Bridge-MIMO" \
-    --wandb-exp-name "mimo-llava-homo-e2e-${LLM_TAG}-test${EXP_SUFFIX}" \
+    --wandb-exp-name "mimo-llava-audio-homo-e2e-${LLM_TAG}-test${EXP_SUFFIX}" \
     --wandb-save-dir "/tmp/wandb" \
+    ${DETERMINISTIC_FLAG} \
+    --freeze-llm ${FREEZE_LLM} \
     --vision-encoder-checkpoint /path/to/clip_checkpoint \
     --language-model-checkpoint /path/to/llm_checkpoint \
-    --dataset-root /path/to/LLaVA-Pretrain/
-    ${DETERMINISTIC_FLAG} \
-    --freeze-llm ${FREEZE_LLM}
+    --audio-encoder-checkpoint /path/to/whisper_checkpoint \
+    --dataset-root /path/to/LLaVA-Pretrain-Audio-Augmented \
+    --hf-data-files "blip_laion_cc_sbu_558k_with_audio.json" \
+    --audio-column audio \

@@ -5,7 +5,7 @@ from __future__ import annotations
 
 from abc import abstractmethod
 from dataclasses import dataclass
-from typing import Callable, Optional, Tuple
+from typing import Callable, Literal, Optional, Tuple
 
 from torch.utils.data import Dataset
 
@@ -15,26 +15,34 @@ from megatron.bridge.training.config import DatasetBuildContext, DatasetProvider
 @dataclass(kw_only=True)
 class MimoDatasetProvider(DatasetProvider):
     """Abstract base class for MIMO dataset providers.
-    
+
     All MIMO dataset providers must inherit from this class and implement
     the required methods. This ensures a consistent interface for MIMO
     data loading.
-    
+
     Required methods:
         - build_datasets: Build train/valid/test datasets
         - get_collate_fn: Return the collate function for batching
-    
+
     Example:
         >>> class MyMimoProvider(MimoDatasetProvider):
         ...     def build_datasets(self, context):
         ...         # Build and return datasets
         ...         return train_ds, valid_ds, test_ds
-        ...     
+        ...
         ...     def get_collate_fn(self):
         ...         # Return collate function
         ...         return my_collate_fn
     """
-    
+
+    # Override the DataloaderConfig default (None → "single") so MIMO providers
+    # get a concrete sampler that honors train_state.consumed_train_samples on
+    # checkpoint resume. "batch" is excluded because it requires global_batch_size
+    # plumbing that MIMO data loading does not set up.
+    dataloader_type: Optional[Literal["single", "cyclic", "external"]] = "single"
+    """Dataloader type: 'single' (default, sequential + resume-aware),
+    'cyclic' (shuffled across epochs, also resume-aware), or 'external' (pass-through)."""
+
     @abstractmethod
     def build_datasets(
         self, context: DatasetBuildContext

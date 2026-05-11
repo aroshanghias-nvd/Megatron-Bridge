@@ -5,10 +5,10 @@ from __future__ import annotations
 
 from typing import TYPE_CHECKING, Dict, Optional, Tuple
 
-import torch
 from torch.utils.data import DataLoader
 
 from megatron.bridge.data.mimo.dp_utils import get_mimo_dp_info
+from megatron.bridge.data.samplers import build_pretraining_data_loader
 from megatron.bridge.training.config import DatasetBuildContext, DatasetProvider
 from megatron.bridge.utils.common_utils import print_rank_0
 
@@ -100,31 +100,31 @@ def build_mimo_data_loaders(
                  f"valid={len(valid_ds) if valid_ds else 0}, "
                  f"test={len(test_ds) if test_ds else 0}")
 
-    # Build data loaders with DP-aware sampling
+    # Build data loaders via the shared standard-path helper so MIMO picks up the
+    # same sampler selection logic (driven by ``dataloader_type``) and automatic
+    # consumed_samples handling on checkpoint resume. dp_size/dp_rank come from
+    # get_mimo_dp_info; per-module DP sub-sharding is deferred to the forward step.
     collate_fn = mimo_provider.get_collate_fn()
     micro_batch_size = cfg.train.micro_batch_size
-    
-    def _make_loader(dataset, shuffle: bool = True) -> Optional[DataLoader]:
-        if dataset is None:
-            return None
-        sampler = torch.utils.data.DistributedSampler(
-            dataset,
-            num_replicas=dp_size,
-            rank=dp_rank,
-            shuffle=shuffle,
-        )
-        return DataLoader(
-            dataset,
-            batch_size=micro_batch_size,
-            sampler=sampler,
+
+    def _make_loader(dataset, consumed_samples: int) -> Optional[DataLoader]:
+        return build_pretraining_data_loader(
+            dataset=dataset,
+            consumed_samples=consumed_samples,
+            dataloader_type=mimo_provider.dataloader_type,
+            micro_batch_size=micro_batch_size,
             num_workers=mimo_provider.num_workers,
+            data_sharding=mimo_provider.data_sharding,
             collate_fn=collate_fn,
             pin_memory=mimo_provider.pin_memory,
+            persistent_workers=mimo_provider.persistent_workers,
+            data_parallel_rank=dp_rank,
+            data_parallel_size=dp_size,
             drop_last=mimo_provider.drop_last,
         )
 
-    train_loader = _make_loader(train_ds, shuffle=True)
-    valid_loader = _make_loader(valid_ds, shuffle=False)
-    test_loader = _make_loader(test_ds, shuffle=False)
-    
+    train_loader = _make_loader(train_ds, consumed_samples=train_state.consumed_train_samples)
+    valid_loader = _make_loader(valid_ds, consumed_samples=0)
+    test_loader = _make_loader(test_ds, consumed_samples=0)
+
     return train_loader, valid_loader, test_loader
